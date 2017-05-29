@@ -8,6 +8,7 @@ Created on Thu May 11 18:51:53 2017
 import numpy as np
 import matplotlib.pyplot as plt
 import chainer
+from chainer import Variable
 import chainer.functions as F
 import chainer.links as L
 
@@ -87,7 +88,7 @@ class Controller(chainer.Chain):
         self.lstm.reset_state()
         xp = self.xp
         B, N, W, R = batch_size, self.N, self.W, self.R
-        self.r = xp.zeros((B, R, W), dtype=np.float32)
+        self.r = xp.zeros((B, R * W), dtype=np.float32)
         self.L = xp.zeros((B, N, N), dtype=np.float32)
         self.M = xp.zeros((B, N, W), dtype=np.float32)
         self.w_w = xp.zeros((B, N), dtype=np.float32)
@@ -116,10 +117,10 @@ class Controller(chainer.Chain):
         # write memory
         w_w, u = self._write_weighting(k_w, beta_w, free, g_a, g_w,
                                        M_prev, w_w_prev, w_r_prev, u_prev)
-        M = self._write_memory(self, w_w, e, v, M_prev)
+        M = self._write_memory(w_w, e, v, M_prev)
 
         # update temporal link matrix
-        L = self._update_temporal_link_matrix(L_prev, w_w, p_prev)
+        L = self._update_temporal_link_matrix(w_w, L_prev, p_prev)
         p = self._precedence_weighting(p_prev, w_w)
 
         # read memory
@@ -144,7 +145,7 @@ class Controller(chainer.Chain):
         k_r, beta_r, k_w, beta_w, e, v, free, g_a, g_w, pi = F.split_axis(
             xi, self._xi_split_indices, 1)
         k_r = k_r.reshape((-1, R, W))
-        beta_r = beta_r.resyape((-1, R, 1))
+        beta_r = beta_r.reshape((-1, R))
         free = free.reshape((-1, R))
         pi = pi.reshape((-1, R, 3))
         return k_r, beta_r, k_w, beta_w, e, v, free, g_a, g_w, pi
@@ -157,34 +158,38 @@ class Controller(chainer.Chain):
         return M_new
 
     def _read_memory(self, M, w_r):
-        w_r = w_r.reshape(-1, self.N)  # (B, R, N) -> (B * R, N)
-        r = F.linear(w_r, M.T)  # TODO: check whether M or M.T
+        M_trans = F.transpose(M, (0, 1, 2))  # TODO: check whether M or M.T?
+        r = F.batch_matmul(w_r, M_trans)
         concatenated_r = r.reshape(-1, self.R * self.W)  # (B*R, W) -> (B, R*W)
         return concatenated_r
 
-    def _content_weighting(M, k, beta):
+    def _content_weighting(self, M, k, beta):
         '''
         Args:
             M:
-                memory matrix of shape (N, W)
+                memory matrix of shape (B, N, W)
             k:
                 batch of key vectors, the shape must be (B, W) or (B, R, W)
             beta:
                 strength parameter
         '''
-        assert k.ndim == 2 or k.ndim == 3
+        ndim = k.ndim
+        assert ndim == 2 or ndim == 3
 
-        if k.ndim == 3:
-            batch_size, R, W = k.shape
-            k = k.reshape((batch_size * R, W))
+        if ndim == 2:
+            B, W = k.shape
+            k = k.reshape((B, 1, W))
+        B, R, W = k.shape
 
-        M = F.normalize(M, axis=1)
-        k = F.normalize(k, axis=1)
-        cosine = F.matmul(k, M, transb=True)
-        w = F.softmax(cosine * beta)
+        M = F.normalize(M, axis=2)
+        k = F.normalize(k, axis=2)
+        cosine = F.batch_matmul(k, M, transb=True)
+        beta = F.expand_dims(beta, 2)
+        beta = F.broadcast_to(beta, (B, R, self.N))
+        w = F.softmax(cosine * beta, axis=2)
 
-        if k.ndim == 3:
-            w = w.reshape((batch_size, R, W))
+        if ndim == 2:
+            w = w.reshape((B, self.N))
         return w
 
     def _retention_vector(self, free, w_r_prev):
@@ -237,9 +242,9 @@ class Controller(chainer.Chain):
 
         # calculate `a` using the cumprod of [1; u] = [1, u[0], ..., u[N-1]]
         # -> [1, u[0], u[0]*u[1], ..., u[0]*...*u[N-1]]
-        u = F.hstack(xp.ones((batch_size, 1), xp.float32), u)
+        u = F.hstack((xp.ones((batch_size, 1), xp.float32), u))
         cp_u = cumprod(u)
-        a = cp_u[:-1] - cp_u[1:]  # eq. (1) can be written as like this
+        a = cp_u[:, :-1] - cp_u[:, 1:]  # eq. (1) can be written as like this
         return a
 
     def _write_weighting(self, k_w, beta_w, free, g_a, g_w,
@@ -274,6 +279,8 @@ class Controller(chainer.Chain):
         u = self._usage_vector(psi, u_prev, w_w_prev)
         a = self._allocation_weighting(u)
         c_w = self._content_weighting(M_prev, k_w, beta_w)
+
+        g_w, g_a, a, c_w = F.broadcast(g_w, g_a, a, c_w)
         w_w = g_w * (g_a * a + (1 - g_a) * c_w)
         return w_w, u
 
@@ -288,7 +295,9 @@ class Controller(chainer.Chain):
             p_new:
                 (B, N)
         '''
-        return (1 - F.sum(w_w, axis=1, keepdims=True)) * p_prev + w_w
+        sum_w = F.sum(w_w, axis=1, keepdims=True)
+        sum_w, p_prev, w_w = F.broadcast(sum_w, p_prev, w_w)
+        return (1 - sum_w) * p_prev + w_w
 
     def _update_temporal_link_matrix(self, w_w, L_prev, p_prev):
         '''
@@ -307,11 +316,13 @@ class Controller(chainer.Chain):
         w_w_col = F.expand_dims(w_w, 2)
         w_w_row_b, w_w_col_b = F.broadcast(w_w_row, w_w_col)
         p_row = F.expand_dims(p_prev, 1)
-        L = (1 - w_w_col_b - w_w_row_b) * L_prev + F.batch_matmul(w_w_col,
-                                                                  p_row)
+        tmp = F.batch_matmul(w_w_col, p_row)
+        L = (1 - w_w_col_b - w_w_row_b) * L_prev + tmp
 
-        mask = xp.ones_like(L.data)
+        B, N = w_w.shape
+        mask = xp.ones((N, N), dtype=np.float32)
         xp.fill_diagonal(mask, 0)
+        mask = xp.tile(mask, (B, 1, 1))
         return L * mask
 
     def _forward_backward_weighting(self, L, w_r_prev):
@@ -341,7 +352,7 @@ class Controller(chainer.Chain):
             k_r:
                 (B, R, W)
             beta_r:
-                (B, R, 1)
+                (B, R)
             pi:
                 (B, R, 3)
             w_r__prev:
@@ -366,7 +377,7 @@ class Controller(chainer.Chain):
 
 if __name__ == '__main__':
     xp = np
-    controller = Controller(100, 200, 50, 300, 64, 4)
+    controller = Controller(100, 200, 50, 40, 64, 4)
     if chainer.cuda.available and xp is chainer.cuda.cupy:
         controller.to_gpu()
 
