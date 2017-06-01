@@ -30,7 +30,8 @@ class TestCumprod(unittest.TestCase):
         x = chainer.Variable(x_data)
         y = functions.cumprod(x, axis=axis)
         self.assertEqual(y.data.dtype, self.dtype)
-        y_expect = xp.cumprod(self.x, axis=axis)
+        # TODO: simply use xp.cumprod
+        y_expect = xp.asarray(numpy.cumprod(self.x, axis=axis))
 
         if self.dtype == numpy.float16:
             options = {'atol': 1e-3, 'rtol': 1e-3}
@@ -71,7 +72,8 @@ class TestCumprod(unittest.TestCase):
     def test_backward_axis_gpu(self):
         axes = numpy.arange(-self.x.ndim, self.x.ndim).tolist() + [None]
         for axis in axes:
-            g_shape = cuda.cupy.cumprod(self.x, axis=axis).shape
+            # TODO: use cupy.cumprod
+            g_shape = numpy.cumprod(cuda.to_cpu(self.x), axis=axis).shape
             gy = cuda.cupy.random.uniform(-1, 1, g_shape).astype(self.dtype)
             self.check_backward(
                 cuda.to_gpu(self.x), axis, cuda.to_gpu(gy))
@@ -90,7 +92,6 @@ class TestCumprodError(unittest.TestCase):
             functions.cumprod(self.x, [0])
         with self.assertRaises(TypeError):
             functions.cumprod(self.x, (0,))
-
 
 
 testing.run_module(__name__, __file__)
