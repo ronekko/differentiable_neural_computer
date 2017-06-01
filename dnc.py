@@ -21,10 +21,10 @@ class Controller(chainer.Chain):
     Args:
         dim_x:
             number of dimensions of the input x
-        dim_h:
-            number of dimensions of the LSTM output h
         dim_y:
             number of dimensions of the output y
+        dim_h:
+            number of dimensions of the LSTM output h
         N:
             number of slots (rows) in the memory matrix M
         W:
@@ -33,7 +33,7 @@ class Controller(chainer.Chain):
             number of the read heads
         '''
 
-    def __init__(self, dim_x, dim_h, dim_y, N, W, R):
+    def __init__(self, dim_x, dim_y, dim_h, N, W, R):
         self.N = N
         self.W = W
         self.R = R
@@ -42,7 +42,7 @@ class Controller(chainer.Chain):
         xi_length = sum(xi_lengths)
         self._xi_split_indices = np.cumsum(xi_lengths)[:-1]
         super(Controller, self).__init__(
-            lstm=L.LSTM(dim_chi, dim_h),
+            lstm=L.LSTM(dim_chi, dim_h, forget_bias_init=1),
             l_ups=L.Linear(dim_h, dim_y, nobias=True),  # W_upsilon
             l_xi=L.Linear(dim_h, xi_length, nobias=True),  # W_xi
             l_r=L.Linear(R * W, dim_y, nobias=True)  # W_r
@@ -240,7 +240,9 @@ class Controller(chainer.Chain):
         batch_size = u.shape[0]
 
         # sort u
-        phi = xp.argsort(u.data, axis=1)
+        # TODO: use xp.argsort
+        u_data = cuda.to_cpu(u.data)
+        phi = np.argsort(u_data, axis=1)
         b_indices = xp.tile(xp.arange(batch_size).reshape(-1, 1), (1, self.N))
         u = u[b_indices, phi]
 
