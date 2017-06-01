@@ -50,37 +50,37 @@ class Controller(chainer.Chain):
 
     def to_cpu(self):
         super(Controller, self).to_cpu()
-        if self.r is not None:
+        if hasattr(self, 'r') and self.r is not None:
             self.r.to_cpu()
-        if self.L is not None:
+        if hasattr(self, 'L') and self.L is not None:
             self.L.to_cpu()
-        if self.M is not None:
+        if hasattr(self, 'M') and self.M is not None:
             self.M.to_cpu()
-        if self.w_w is not None:
+        if hasattr(self, 'w_w') and self.w_w is not None:
             self.w_w.to_cpu()
-        if self.w_r is not None:
+        if hasattr(self, 'w_r') and self.w_r is not None:
             self.w_r.to_cpu()
-        if self.u is not None:
+        if hasattr(self, 'u') and self.u is not None:
             self.u.to_cpu()
-        if self.p is not None:
+        if hasattr(self, 'p') and self.p is not None:
             self.p.to_cpu()
         return self
 
     def to_gpu(self, device=None):
         super(Controller, self).to_gpu(device)
-        if self.r is not None:
+        if hasattr(self, 'r') and self.r is not None:
             self.r.to_gpu(device)
-        if self.L is not None:
+        if hasattr(self, 'L') and self.L is not None:
             self.L.to_gpu(device)
-        if self.M is not None:
+        if hasattr(self, 'M') and self.M is not None:
             self.M.to_gpu(device)
-        if self.w_w is not None:
+        if hasattr(self, 'w_w') and self.w_w is not None:
             self.w_w.to_gpu(device)
-        if self.w_r is not None:
+        if hasattr(self, 'w_r') and self.w_r is not None:
             self.w_r.to_gpu(device)
-        if self.u is not None:
+        if hasattr(self, 'u') and self.u is not None:
             self.u.to_gpu(device)
-        if self.p is not None:
+        if hasattr(self, 'p') and self.p is not None:
             self.p.to_gpu(device)
         return self
 
