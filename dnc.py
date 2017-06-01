@@ -145,9 +145,13 @@ class Controller(chainer.Chain):
         k_r, beta_r, k_w, beta_w, e, v, free, g_a, g_w, pi = F.split_axis(
             xi, self._xi_split_indices, 1)
         k_r = k_r.reshape((-1, R, W))
-        beta_r = beta_r.reshape((-1, R))
-        free = free.reshape((-1, R))
-        pi = pi.reshape((-1, R, 3))
+        beta_r = 1 + F.softplus(beta_r.reshape((-1, R)))
+        beta_w = 1 + F.softplus(beta_w)
+        e = F.sigmoid(e)
+        free = F.sigmoid(free.reshape((-1, R)))
+        g_a = F.sigmoid(g_a)
+        g_w = F.sigmoid(g_w)
+        pi = F.softmax(pi.reshape((-1, R, 3)), axis=2)
         return k_r, beta_r, k_w, beta_w, e, v, free, g_a, g_w, pi
 
     def _write_memory(self, w_w, e, v, M_prev):
