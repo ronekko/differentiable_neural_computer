@@ -8,12 +8,14 @@ Created on Thu May 11 18:51:53 2017
 import numpy as np
 import matplotlib.pyplot as plt
 import chainer
+from chainer import cuda
 from chainer import Variable
 import chainer.functions as F
 import chainer.links as L
 
 from prod import prod
 from cumprod import cumprod
+from copy_dataset import generate_copy_data
 
 
 class Controller(chainer.Chain):
@@ -382,12 +384,60 @@ class Controller(chainer.Chain):
 
 
 if __name__ == '__main__':
-    xp = np
-    controller = Controller(100, 200, 50, 40, 64, 4)
-    if chainer.cuda.available and xp is chainer.cuda.cupy:
-        controller.to_gpu()
+    use_gpu = False
+    batch_size = 20
+    seq_len = 20
+    dim_x = 9
+    dim_y = dim_x
 
-    batch_size = 16
-    x = xp.ones((batch_size, 100), xp.float32)
-    controller.reset_state(batch_size)
-    y = controller(x)
+    dim_h = 100
+    num_memory_slots = 128
+    dim_memory_vector = 20
+    num_read_heads = 1
+
+    controller = Controller(dim_x, dim_y, dim_h, num_memory_slots,
+                            dim_memory_vector, num_read_heads)
+    if use_gpu:
+        controller.to_gpu()
+    chainer.set_debug(True)
+    xp = cuda.cupy if use_gpu else np
+    optimizer = chainer.optimizers.RMSprop(0.0001)
+    optimizer.setup(controller)
+    optimizer.zero_grads()
+
+    losses = []
+    accuracies = []
+    for i in range(100000):
+        x, t = generate_copy_data(batch_size, seq_len, dim_x)
+        x = x.transpose((1, 0, 2))
+        t = t.transpose((1, 0, 2))
+        if use_gpu:
+            x = cuda.to_gpu(x)
+            t = cuda.to_gpu(t)
+
+        controller.reset_state(batch_size)
+        for x_t in x:
+            controller(x_t)
+
+        y = []
+        for t_t in t:
+            dummy_input = xp.zeros_like(x_t)
+            y_t = controller(dummy_input)
+            y.append(y_t)
+        y = F.stack(y)
+        loss = F.sigmoid_cross_entropy(y, t)
+        loss_data = cuda.to_cpu(loss.data)
+        acc = F.binary_accuracy(y, t)
+        acc_data = cuda.to_cpu(acc.data)
+        optimizer.zero_grads()
+        loss.backward()
+        optimizer.update()
+        print('{}: {:0.5},\t{:1.5}'.format(
+            i, float(acc_data), float(loss_data)))
+        losses.append(loss_data)
+        accuracies.append(acc_data)
+
+        if i % 50 == 0:
+            plt.plot(accuracies)
+            plt.grid()
+            plt.show()
