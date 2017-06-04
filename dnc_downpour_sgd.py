@@ -59,8 +59,9 @@ def worker(batch_size, seq_len, dim_x, receive_queue, send_queue):
 
 
 if __name__ == '__main__':
-    batch_size = 1
+    train_batch_size = 1
     train_seq_len = (5, 20)
+    test_batch_size = 40
     test_seq_len = 20
     dim_x = 9
     dim_y = dim_x
@@ -84,9 +85,9 @@ if __name__ == '__main__':
     optimizer.zero_grads()
 
     # Call the forward once in order to resolve uninitialized variables
-    x, c = generate_copy_data(batch_size, 1, dim_x)
+    x, c = generate_copy_data(1, 1, dim_x)
     x = x.transpose((1, 0, 2))
-    model_master.reset_state(batch_size)
+    model_master.reset_state(1)
     model_master(x[0])
 
     # Create worker processes
@@ -96,7 +97,7 @@ if __name__ == '__main__':
     for p in range(num_processes):
         send_queue = mp.Queue(maxsize=1)
         process = mp.Process(target=worker,
-                             args=(batch_size, train_seq_len, dim_x,
+                             args=(train_batch_size, train_seq_len, dim_x,
                                    send_queue, receive_queue))
         process.start()
         processes.append(process)
@@ -123,13 +124,13 @@ if __name__ == '__main__':
                 pass
 
             # Evaluation
-            if count_updates % 20 == 0 and evaluate_at != count_updates:
+            if count_updates % 100 == 0 and evaluate_at != count_updates:
                 evaluate_at = count_updates
-                x, t = generate_copy_data(batch_size, test_seq_len, dim_x)
+                x, t = generate_copy_data(test_batch_size, test_seq_len, dim_x)
                 x = x.transpose((1, 0, 2))
                 t = t.transpose((1, 0, 2))
 
-                model_master.reset_state(batch_size)
+                model_master.reset_state(test_batch_size)
                 for x_t in x:
                     model_master(x_t)
 
