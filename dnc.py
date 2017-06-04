@@ -157,6 +157,7 @@ class Controller(chainer.Chain):
         return k_r, beta_r, k_w, beta_w, e, v, free, g_a, g_w, pi
 
     def _write_memory(self, w_w, e, v, M_prev):
+        xp = self.xp
         ones = xp.ones((self.N, self.W), xp.float32)
         we = F.batch_matmul(w_w, e, transb=True)
         wv = F.batch_matmul(w_w, v, transb=True)
@@ -320,6 +321,7 @@ class Controller(chainer.Chain):
             L_new:
                 (B, N, N)
         '''
+        xp = self.xp
         w_w_row = F.expand_dims(w_w, 1)
         w_w_col = F.expand_dims(w_w, 2)
         w_w_row_b, w_w_col_b = F.broadcast(w_w_row, w_w_col)
@@ -395,13 +397,14 @@ if __name__ == '__main__':
     dim_memory_vector = 20
     num_read_heads = 1
 
+    learning_rate = 0.0001
+
     controller = Controller(dim_x, dim_y, dim_h, num_memory_slots,
                             dim_memory_vector, num_read_heads)
     if use_gpu:
         controller.to_gpu()
-    chainer.set_debug(True)
     xp = cuda.cupy if use_gpu else np
-    optimizer = chainer.optimizers.RMSprop(0.0001)
+    optimizer = chainer.optimizers.RMSprop(learning_rate)
     optimizer.setup(controller)
     optimizer.zero_grads()
 
