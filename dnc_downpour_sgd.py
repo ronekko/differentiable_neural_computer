@@ -7,6 +7,7 @@ Created on Sun Jun  4 07:18:57 2017
 
 import multiprocessing as mp
 from queue import Empty, Full
+import random
 
 import numpy as np
 import chainer
@@ -21,12 +22,20 @@ def worker(batch_size, seq_len, dim_x, receive_queue, send_queue):
     pid = mp.current_process()._identity[0]
     np.random.seed(pid)
     model = receive_queue.get()
+
+    if np.isscalar(seq_len):
+        seq_len = (seq_len, seq_len)
+    min_seq_len = min(seq_len)
+    max_seq_len = max(seq_len)
+
     while True:
         try:
             model = receive_queue.get(block=False)
         except Empty:
             pass
-        x, t = generate_copy_data(batch_size, seq_len, dim_x)
+
+        random_seq_len = random.randint(min_seq_len, max_seq_len)
+        x, t = generate_copy_data(batch_size, random_seq_len, dim_x)
         x = x.transpose((1, 0, 2))
         t = t.transpose((1, 0, 2))
 
@@ -51,7 +60,8 @@ def worker(batch_size, seq_len, dim_x, receive_queue, send_queue):
 
 if __name__ == '__main__':
     batch_size = 1
-    seq_len = 20
+    train_seq_len = (5, 20)
+    test_seq_len = 20
     dim_x = 9
     dim_y = dim_x
 
@@ -74,7 +84,7 @@ if __name__ == '__main__':
     optimizer.zero_grads()
 
     # Call the forward once in order to resolve uninitialized variables
-    x, c = generate_copy_data(batch_size, seq_len, dim_x)
+    x, c = generate_copy_data(batch_size, 1, dim_x)
     x = x.transpose((1, 0, 2))
     model_master.reset_state(batch_size)
     model_master(x[0])
@@ -86,7 +96,7 @@ if __name__ == '__main__':
     for p in range(num_processes):
         send_queue = mp.Queue(maxsize=1)
         process = mp.Process(target=worker,
-                             args=(batch_size, seq_len, dim_x,
+                             args=(batch_size, train_seq_len, dim_x,
                                    send_queue, receive_queue))
         process.start()
         processes.append(process)
@@ -115,7 +125,7 @@ if __name__ == '__main__':
             # Evaluation
             if count_updates % 20 == 0 and evaluate_at != count_updates:
                 evaluate_at = count_updates
-                x, t = generate_copy_data(batch_size, seq_len, dim_x)
+                x, t = generate_copy_data(batch_size, test_seq_len, dim_x)
                 x = x.transpose((1, 0, 2))
                 t = t.transpose((1, 0, 2))
 
