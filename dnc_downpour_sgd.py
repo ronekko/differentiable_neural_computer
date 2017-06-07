@@ -9,6 +9,7 @@ import multiprocessing as mp
 from queue import Empty, Full
 import random
 
+import matplotlib.pyplot as plt
 import numpy as np
 import chainer
 from chainer import cuda
@@ -106,6 +107,7 @@ if __name__ == '__main__':
 
     count_updates = 0
     evaluate_at = 0
+    acc_log = []
     try:
         while count_updates < num_updates:
             try:
@@ -144,6 +146,7 @@ if __name__ == '__main__':
                 loss_data = cuda.to_cpu(loss.data)
                 acc = F.binary_accuracy(y, t)
                 acc_data = cuda.to_cpu(acc.data)
+                acc_log.append(acc_data)
                 print('{}: {:0.5},\t{:1.5}'.format(
                     count_updates, float(acc_data), float(loss_data)))
 
@@ -152,3 +155,8 @@ if __name__ == '__main__':
 
     for process in processes:
         process.terminate()
+
+    plt.plot(acc_log)
+    plt.grid()
+    plt.ylim([0, 1])
+    plt.show()
