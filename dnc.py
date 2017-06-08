@@ -157,6 +157,20 @@ class Controller(chainer.Chain):
         return k_r, beta_r, k_w, beta_w, e, v, free, g_a, g_w, pi
 
     def _write_memory(self, w_w, e, v, M_prev):
+        '''
+        Args:
+            w_w:
+                (B, N)
+            e:
+                (B, W)
+            v:
+                (B, W)
+            M_prev:
+                (B, N, W)
+        Returns:
+            M_new:
+                (B, N, W)
+        '''
         xp = self.xp
         ones = xp.ones((self.N, self.W), xp.float32)
         we = F.batch_matmul(w_w, e, transb=True)
@@ -165,8 +179,17 @@ class Controller(chainer.Chain):
         return M_new
 
     def _read_memory(self, M, w_r):
-        M_trans = F.transpose(M, (0, 1, 2))  # TODO: check whether M or M.T?
-        r = F.batch_matmul(w_r, M_trans)
+        '''
+        Args:
+            M:
+                (B, N, W)
+            w_r:
+                (B, R, N)
+        Returns:
+            concatenated_r:
+                (B, R * W)
+        '''
+        r = F.batch_matmul(w_r, M)
         concatenated_r = r.reshape(-1, self.R * self.W)  # (B*R, W) -> (B, R*W)
         return concatenated_r
 
