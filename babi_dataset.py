@@ -44,44 +44,6 @@ def download(url, dataset_dirpath):
     return str(dataset_filepath)
 
 
-def _load_task_file(task_file_path):
-    with open(task_file_path) as f:
-        lines = f.readlines()
-
-    stories = []
-    story = []
-    for i, line in enumerate(lines):
-        n, body = _parse_line(line)
-        if n == 1 and i != 0:
-            stories.append(story)
-            story = []
-
-        record = _parse_body(body)
-        story.append(record)
-    stories.append(story)
-    return stories
-
-
-def _parse_line(line):
-    ws_index = line.index(' ')
-    n = int(line[:ws_index])
-    body = line[ws_index+1:]
-    return n, body
-
-
-def _parse_body(body):
-    body = body.replace('.', ' .')
-    body = body.replace('?', ' ?')
-    body = body.replace(',', ' ')
-    parts = body.strip().lower().split('\t')
-    text = parts[0].strip()
-    if len(parts) == 3:
-        answer, support = parts[1], parts[2]
-    else:
-        answer, support = None, None
-    return text, answer, support
-
-
 def load_babi():
     # download and extract the dataset
     url = 'http://www.thespermwhale.com/jaseweston/babi/tasks_1-20_v1-2.tar.gz'
@@ -133,6 +95,44 @@ def load_babi():
         word_types = cPickle.load(f)
 
     return dataset['train'], dataset['test'], word_types
+
+
+def _load_task_file(task_file_path):
+    with open(task_file_path) as f:
+        lines = f.readlines()
+
+    stories = []
+    story = []
+    for i, line in enumerate(lines):
+        n, body = _parse_line(line)
+        if n == 1 and i != 0:
+            stories.append(story)
+            story = []
+
+        record = _parse_body(body)
+        story.append(record)
+    stories.append(story)
+    return stories
+
+
+def _parse_line(line):
+    ws_index = line.index(' ')
+    n = int(line[:ws_index])
+    body = line[ws_index+1:]
+    return n, body
+
+
+def _parse_body(body):
+    body = body.replace('.', ' .')
+    body = body.replace('?', ' ?')
+    body = body.replace(',', ' ')
+    parts = body.strip().lower().split('\t')
+    text = parts[0].strip()
+    if len(parts) == 3:
+        answer, support = parts[1], parts[2]
+    else:
+        answer, support = None, None
+    return text, answer, support
 
 
 if __name__ == '__main__':
