@@ -72,6 +72,7 @@ def _parse_line(line):
 def _parse_body(body):
     body = body.replace('.', ' .')
     body = body.replace('?', ' ?')
+    body = body.replace(',', ' ')
     parts = body.strip().lower().split('\t')
     text = parts[0].strip()
     if len(parts) == 3:
@@ -81,7 +82,7 @@ def _parse_body(body):
     return text, answer, support
 
 
-if __name__ == '__main__':
+def load_babi():
     # download and extract the dataset
     url = 'http://www.thespermwhale.com/jaseweston/babi/tasks_1-20_v1-2.tar.gz'
     dataset_dirpath = r'E:/Dataset/babi'
@@ -107,13 +108,17 @@ if __name__ == '__main__':
                 tasks.append(stories)
             dataset[train_or_test] = tasks
 
-        word_types = set()
+        word_types = set('-')
         for tasks in dataset.values():
             for stories in tasks:
                 for story in stories:
-                    for text, _, _ in story:
+                    for text, answers, _ in story:
                         for token in text.split(' '):
                             word_types.add(token)
+                        if answers:
+                            for token in answers.split(' '):
+                                word_types.add(token)
+        word_types = list(word_types)
 
         with open(Path(data_dirpath, subset, 'data.pkl'), 'wb') as f:
             cPickle.dump(dataset, f)
@@ -127,4 +132,36 @@ if __name__ == '__main__':
     with open(Path(data_dirpath, subset, 'vocab.pkl'), 'rb') as f:
         word_types = cPickle.load(f)
 
-    (dataset['train'], dataset['test'], word_types)
+    return dataset['train'], dataset['test'], word_types
+
+
+if __name__ == '__main__':
+    train, test, vocab = load_babi()
+
+    word_to_id = {}
+    for i, word_type in enumerate(vocab):
+        word_to_id[word_type] = i
+
+    task = train[0]
+    story = task[0]
+    x = []
+    t = []
+    for task in train:
+        for story in task:
+            sequences = []
+            targets = []
+            for record in story:
+                sentence, answers, support = record
+                seq = [word_to_id[token] for token in sentence.split(' ')]
+                sequences.append(seq)
+                target = [-1] * len(seq)
+                targets.append(target)
+                if answers:
+                    seq = [word_to_id['-'] for _ in answers.split(' ')]
+                    sequences.append(seq)
+                    target = [word_to_id[tok] for tok in answers.split(' ')]
+                    targets.append(target)
+            sequence = sum(sequences, [])  # join lists
+            target = sum(targets, [])
+            x.append(sequence)
+            t.append(target)
